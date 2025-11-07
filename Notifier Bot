@@ -1,0 +1,102 @@
+"""
+MaDevMax Notifier Bot
+Author: MaDevMax (Matveichuk Maxim)
+GitHub: https://github.com/MaDevMax
+Year: 2025
+"""
+
+import telebot
+import os
+
+TOKEN = "YOUR_TOKEN_HERE"
+ADMIN_ID = 123456789  # свой Telegram ID
+
+bot = telebot.TeleBot(TOKEN)
+
+USERS_FILE = "users.txt"
+users = set()
+
+if os.path.exists(USERS_FILE):
+    with open(USERS_FILE, "r") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                users.add(int(line))
+    print(f"[LOG] Загружено {len(users)} пользователей.")
+else:
+    print("[LOG] users.txt не найден. Создастся при первом пользователе.")
+
+
+def save_user(user_id: int):
+    if user_id not in users:
+        users.add(user_id)
+        with open(USERS_FILE, "a") as f:
+            f.write(f"{user_id}\n")
+        print(f"[LOG] Добавлен новый пользователь: {user_id}")
+
+
+@bot.message_handler(commands=['start'])
+def start_command(message):
+    save_user(message.chat.id)
+    bot.send_message(
+        message.chat.id,
+        "🔔 Привет! Я — MaDevMax Notifier Bot.\n"
+        "Ты подписан на уведомления о новых проектах и обновлениях.\n\n"
+        "👉 /help — справка\n"
+        "👉 /stop — отписка"
+    )
+
+
+@bot.message_handler(commands=['help'])
+def help_command(message):
+    bot.send_message(
+        message.chat.id,
+        "Я рассылаю важные новости всем подписчикам.\n"
+        "Если ты админ, используй:\n"
+        "`/send Текст рассылки` 📨"
+    )
+
+
+@bot.message_handler(commands=['stop'])
+def stop_command(message):
+    uid = message.chat.id
+    if uid in users:
+        users.remove(uid)
+        with open(USERS_FILE, "w") as f:
+            for user in users:
+                f.write(f"{user}\n")
+        bot.send_message(uid, "🚫 Ты отписался от уведомлений.")
+        print(f"[LOG] Пользователь {uid} удалён из подписчиков.")
+    else:
+        bot.send_message(uid, "Ты и так не подписан на уведомления.")
+
+
+@bot.message_handler(commands=['send'])
+def admin_send(message):
+    if message.from_user.id != ADMIN_ID:
+        bot.send_message(message.chat.id, "❌ Нет прав.")
+        return
+
+    text = message.text.replace("/send", "").strip()
+    if not text:
+        bot.send_message(message.chat.id, "После /send добавь текст сообщения.")
+        return
+
+    sent, failed = 0, 0
+    for uid in users:
+        try:
+            bot.send_message(uid, text)
+            sent += 1
+        except Exception as e:
+            failed += 1
+            print(f"[LOG] Ошибка {uid}: {e}")
+
+    reply = f"✅ Доставлено {sent}"
+    if failed:
+        reply += f"\n⚠️ Ошибок: {failed}"
+    bot.send_message(message.chat.id, reply)
+    print(f"[LOG] Рассылка завершена: {sent} / {failed}.")
+
+
+print("🔹 MaDevMax Notifier Bot запущен...")
+bot.polling(none_stop=True)
